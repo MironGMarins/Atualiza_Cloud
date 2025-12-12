@@ -9,13 +9,13 @@ import requests
 import unicodedata
 from datetime import datetime, timedelta
 
-from google_spreadsheets.spreadsheet import GoogleSheetClient
+# REMOVIDO: from google_spreadsheets.spreadsheet import GoogleSheetClient
+# ADICIONADO: Uso direto do gspread
 import gspread
 
 # ==============================================================================
 # ⚠️ CONFIGURAÇÕES OBTIDAS DOS SEGREDOS (ENV VARS)
 # ==============================================================================
-# Se você não criou secret para o ID da conta, mantemos fixo aqui:
 ACCOUNT_ID = "3619571" 
 
 # Segredos de Autenticação
@@ -27,7 +27,7 @@ REFRESH_TOKEN_SECRETO = os.getenv("BASECAMP_REFRESH_TOKEN")
 # --- CONFIGURAÇÕES DE BUSCA ---
 PALAVRAS_CHAVE_PROJETO = ["MEDIA PORTAL", "SPRINT"] 
 TERMOS_DE_BUSCA_LISTAS = ["ATIVIDADES DA SEMANA", "BACKLOG"]
-LIMITE_LISTAS_RECENTES = 6
+LIMITE_LISTAS_RECENTES = 0
 LIMITE_TAREFAS_POR_LISTA = 0 
 
 # Nomes das Abas
@@ -54,10 +54,22 @@ def configurar_google_credentials():
     conteudo_json = os.getenv("GCP_CREDENTIALS_JSON")
     caminho_arquivo = "google_credentials.json"
     
-    if conteudo_json and not os.path.exists(caminho_arquivo):
+    if conteudo_json:
         print(">>> Configurando credenciais Google...")
         with open(caminho_arquivo, "w") as f:
             f.write(conteudo_json)
+    else:
+        print("⚠️ AVISO: Segredo GCP_CREDENTIALS_JSON não encontrado.")
+
+def conectar_google_sheets():
+    """Conecta no Google Sheets usando o arquivo JSON criado"""
+    try:
+        # Usa o gspread nativo para autenticar com o arquivo json
+        gc = gspread.service_account(filename="google_credentials.json")
+        return gc
+    except Exception as e:
+        print(f"❌ Erro ao conectar no Google Sheets: {e}")
+        return None
 
 # --- FUNÇÕES AUXILIARES ---
 def normalizar_texto(texto):
@@ -115,7 +127,6 @@ def extrair_mes_ano_do_nome_aba(nome_aba):
 
 # --- AUTENTICAÇÃO CLOUD ---
 def obter_token_cloud():
-    """Gera token novo usando o Refresh Token dos segredos"""
     if not REFRESH_TOKEN_SECRETO:
         print("❌ ERRO: Segredo BASECAMP_REFRESH_TOKEN não encontrado.")
         return None
@@ -267,7 +278,7 @@ async def process_bucket(token, bucket_id):
     return bucket_tasks
 
 # --- LÓGICA DE DADOS ---
-def processar_mes_atual(df_completo, sheet_client, df_equipes):
+def processar_mes_atual(df_completo, gc, df_equipes):
     print("\n>>> VERIFICANDO ABA DO MÊS ATUAL...")
     hoje = datetime.now()
     mes_atual = hoje.month; ano_atual = hoje.year
@@ -294,7 +305,7 @@ def processar_mes_atual(df_completo, sheet_client, df_equipes):
     df_upload = df_mes[[c for c in cols_final if c in df_mes.columns]].fillna("")
     
     try:
-        spreadsheet = sheet_client.client.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
+        spreadsheet = gc.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
         try: worksheet = spreadsheet.worksheet(nome_aba_atual); worksheet.clear()
         except gspread.exceptions.WorksheetNotFound: worksheet = spreadsheet.add_worksheet(title=nome_aba_atual, rows=len(df_upload)+100, cols=20)
         data = [df_upload.columns.values.tolist()] + df_upload.astype(str).values.tolist()
@@ -302,7 +313,7 @@ def processar_mes_atual(df_completo, sheet_client, df_equipes):
         print(f"      ✅ Sucesso!")
     except Exception as e: print(f"      ❌ Erro upload: {e}")
 
-def atualizar_aba_backlog(df_global, sheet_client, df_equipes):
+def atualizar_aba_backlog(df_global, gc, df_equipes):
     print(f"\n>>> ATUALIZANDO ABA '{NOME_ABA_BACKLOG}'...")
     mask_backlog = df_global['Atividades Semanal'].astype(str).str.contains("BACKLOG", case=False, na=False)
     df_backlog = df_global[mask_backlog].copy()
@@ -317,7 +328,7 @@ def atualizar_aba_backlog(df_global, sheet_client, df_equipes):
     df_upload = df_backlog[cols_final].fillna("")
 
     try:
-        spreadsheet = sheet_client.client.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
+        spreadsheet = gc.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
         try: worksheet = spreadsheet.worksheet(NOME_ABA_BACKLOG); worksheet.clear()
         except gspread.exceptions.WorksheetNotFound: worksheet = spreadsheet.add_worksheet(title=NOME_ABA_BACKLOG, rows=len(df_upload)+100, cols=20)
         data = [df_upload.columns.values.tolist()] + df_upload.astype(str).values.tolist()
@@ -325,10 +336,10 @@ def atualizar_aba_backlog(df_global, sheet_client, df_equipes):
         print(f"   ✅ Atualizado!")
     except: pass
 
-def consolidar_meses_para_notas(sheet_client):
+def consolidar_meses_para_notas(gc):
     print("\n>>> CONSOLIDANDO NOTAS...")
     try:
-        spreadsheet = sheet_client.client.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
+        spreadsheet = gc.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
         all_worksheets = spreadsheet.worksheets()
     except: return
 
@@ -362,7 +373,7 @@ def consolidar_meses_para_notas(sheet_client):
             print("   ✅ Atualizado!")
         except: pass
 
-def atualizar_historico_diario(df_global, sheet_client):
+def atualizar_historico_diario(df_global, gc):
     print("\n>>> HISTÓRICO DIÁRIO...")
     hoje = datetime.now()
     inicio_semana = hoje - timedelta(days=hoje.weekday()) 
@@ -376,7 +387,7 @@ def atualizar_historico_diario(df_global, sheet_client):
     fechadas = df_semana[df_semana['Data Final'].astype(str).str.len() > 5].shape[0]
     
     try:
-        spreadsheet = sheet_client.client.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
+        spreadsheet = gc.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
         try: ws_hist = spreadsheet.worksheet(NOME_ABA_HISTORICO)
         except gspread.exceptions.WorksheetNotFound:
             ws_hist = spreadsheet.add_worksheet(title=NOME_ABA_HISTORICO, rows=1000, cols=3)
@@ -400,6 +411,9 @@ def atualizar_historico_diario(df_global, sheet_client):
 async def main_process():
     print(f"=== INICIANDO SINCRONIA CLOUD ===")
     configurar_google_credentials()
+    gc = conectar_google_sheets() # GERA O CLIENTE GSPREAD
+    if not gc: return
+
     token = obter_token_cloud()
     if not token: return
 
@@ -444,16 +458,15 @@ async def main_process():
     # 4. LER EQUIPES
     print("\n>>> LENDO EQUIPES...")
     df_equipes = pd.DataFrame()
-    sheet_client = GoogleSheetClient() 
     try:
-        ss = sheet_client.client.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
+        ss = gc.open(title=os.getenv("SPREADSHEET_NAME"), folder_id=os.getenv("FOLDER_ID"))
         ws_eq = ss.worksheet(NOME_ABA_EQUIPES)
         records_eq = ws_eq.get_all_records()
         df_equipes = pd.DataFrame(records_eq)
     except: print("   ⚠️ Erro Equipes")
 
     # 5. EXECUÇÃO DAS ATUALIZAÇÕES
-    processar_mes_atual(df, sheet_client, df_equipes)
+    processar_mes_atual(df, gc, df_equipes)
 
     print(f"\n>>> ATUALIZANDO GERAL...")
     if not df_equipes.empty:
@@ -469,9 +482,9 @@ async def main_process():
         print("✅ Geral OK.")
     except: pass
 
-    atualizar_aba_backlog(final_df, sheet_client, df_equipes)
-    consolidar_meses_para_notas(sheet_client)
-    atualizar_historico_diario(final_df, sheet_client)
+    atualizar_aba_backlog(final_df, gc, df_equipes)
+    consolidar_meses_para_notas(gc)
+    atualizar_historico_diario(final_df, gc)
 
 if __name__ == "__main__":
     asyncio.run(main_process())
