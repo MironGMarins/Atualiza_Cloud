@@ -1,11 +1,15 @@
 name: Sincronia Basecamp Diária
 
 on:
+  # 1. Roda a cada 30 minutos
   schedule:
-    # Roda a cada 2 horas (Horário UTC)
-    - cron: '0 */2 * * *'
+    - cron: '*/30 * * * *'
   
-  # Botão para rodar manualmente (para testar agora)
+  # 2. Roda automaticamente quando você der Push (bom para testar correções)
+  push:
+    branches: [ "main", "master" ]
+  
+  # 3. Permite clicar num botão "Run" na tela do GitHub a qualquer momento
   workflow_dispatch:
 
 jobs:
@@ -13,7 +17,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Baixar código
+    - name: Baixar código do repositório
       uses: actions/checkout@v3
 
     - name: Configurar Python
@@ -26,13 +30,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Rodar Script
+    - name: Rodar Script de Sincronia
       env:
+        # Segredos do Basecamp
         BASECAMP_CLIENT_ID: ${{ secrets.BASECAMP_CLIENT_ID }}
         BASECAMP_CLIENT_SECRET: ${{ secrets.BASECAMP_CLIENT_SECRET }}
         BASECAMP_REDIRECT_URI: ${{ secrets.BASECAMP_REDIRECT_URI }}
         BASECAMP_REFRESH_TOKEN: ${{ secrets.BASECAMP_REFRESH_TOKEN }}
+        # Segredos do Google
         GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+        # Variáveis Opcionais (se seu script usar)
         SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
         FOLDER_ID: ${{ secrets.FOLDER_ID }}
       run: python AtualizaPlanilha_Cloud.py
