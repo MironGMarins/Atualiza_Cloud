@@ -1,0 +1,37 @@
+name: Sincronia Basecamp Diária
+
+on:
+  schedule:
+    - cron: '*/30 * * * *' # Roda a cada 30 min
+  push:
+    branches: [ "main", "master" ] # Roda ao salvar
+  workflow_dispatch: # Permite rodar manualmente
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Baixar código
+      uses: actions/checkout@v3
+
+    - name: Configurar Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Instalar Bibliotecas
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Rodar Script
+      env:
+        BASECAMP_CLIENT_ID: ${{ secrets.BASECAMP_CLIENT_ID }}
+        BASECAMP_CLIENT_SECRET: ${{ secrets.BASECAMP_CLIENT_SECRET }}
+        BASECAMP_REDIRECT_URI: ${{ secrets.BASECAMP_REDIRECT_URI }}
+        BASECAMP_REFRESH_TOKEN: ${{ secrets.BASECAMP_REFRESH_TOKEN }}
+        GCP_CREDENTIALS_JSON: ${{ secrets.GCP_CREDENTIALS_JSON }}
+        SPREADSHEET_NAME: ${{ secrets.SPREADSHEET_NAME }}
+        FOLDER_ID: ${{ secrets.FOLDER_ID }}
+      run: python AtualizaPlanilha_Cloud.py
