@@ -2,7 +2,7 @@ name: Sincronia Basecamp Diária
 
 on:
   schedule:
-    - cron: '0 11,14,17,20,23 * * 1-5' #roda a cada 8,11,14,17 e 20 horas de dias da semana
+    - cron: '0 11,15,20 * * 1-5' #roda a cada 8,11,14,17 e 20 horas de dias da semana
   push:
     branches: [ "main", "master" ] # Roda ao salvar
   workflow_dispatch: # Permite rodar manualmente
