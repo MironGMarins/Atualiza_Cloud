@@ -403,7 +403,7 @@ def atualizar_historico_diario(df_global, gc):
                 break
         
         nova_linha = [hoje_str, fechadas, total_tarefas]
-        if linha_encontrada: ws_hist.update(f"A{linha_encontrada}:C{linha_encontrada}", [nova_linha], value_input_option='USER_ENTERED')
+        if linha_encontrada: ws_hist.update(range_name=f"A{linha_encontrada}:C{linha_encontrada}", values=[nova_linha], value_input_option='USER_ENTERED')
         else: ws_hist.append_row(nova_linha, value_input_option='USER_ENTERED')
         print("   ✅ Atualizado!")
     except: pass
