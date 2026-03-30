@@ -439,7 +439,7 @@ async def main_process():
     
     df['Data Inicial'] = ''
     if 'created_at' in df.columns:
-        df['Data Inicial'] = pd.to_datetime(df['created_at'], errors='coerce').dt.strftime('%d/%m/%Y')
+        df['Data Inicial'] = pd.to_datetime(df['created_at'], errors='coerce', utc=True).dt.strftime('%d/%m/%Y')
 
     def get_completion(row):
         if isinstance(row.get('completion'), dict):
