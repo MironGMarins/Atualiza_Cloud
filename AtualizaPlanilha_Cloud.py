@@ -285,7 +285,10 @@ def processar_mes_atual(df_completo, gc, df_equipes):
     nome_aba_atual = f"{MESES_NUM_PT[mes_atual]} {ano_atual}"
 
     df_completo['Data_Ref_Lista'] = df_completo['Atividades Semanal'].apply(extrair_data_da_lista_dt)
-    mask_mes_atual = (df_completo['Data_Ref_Lista'].dt.month == mes_atual) & (df_completo['Data_Ref_Lista'].dt.year == ano_atual)
+    mask_mes_atual = (
+        ((df_completo['Data_Ref_Lista'].dt.month == mes_atual) & (df_completo['Data_Ref_Lista'].dt.year == ano_atual)) |
+        ((hoje.day <= 7) & (df_completo['Data_Ref_Lista'].dt.month == (mes_atual - 1 if mes_atual > 1 else 12)))
+    )
     df_mes = df_completo[mask_mes_atual].copy()
     
     if df_mes.empty: print(f"   ⚠️ Nada para {nome_aba_atual}."); return
