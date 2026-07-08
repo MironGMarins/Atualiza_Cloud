@@ -284,16 +284,20 @@ def processar_mes_atual(df_completo, gc, df_equipes):
     mes_atual = hoje.month; ano_atual = hoje.year
     nome_aba_atual = f"{MESES_NUM_PT[mes_atual]} {ano_atual}"
 
+    # 1. Identificar as semanas que tocam no mês atual (Segunda ou Sexta)
     df_completo['Data_Ref_Lista'] = df_completo['Atividades Semanal'].apply(extrair_data_da_lista_dt)
+    df_completo['Sexta_Ref_Lista'] = df_completo['Data_Ref_Lista'] + pd.Timedelta(days=4)
+
     mask_mes_atual = (
         ((df_completo['Data_Ref_Lista'].dt.month == mes_atual) & (df_completo['Data_Ref_Lista'].dt.year == ano_atual)) |
-        ((hoje.day <= 7) & (df_completo['Data_Ref_Lista'].dt.month == (mes_atual - 1 if mes_atual > 1 else 12)))
+        ((df_completo['Sexta_Ref_Lista'].dt.month == mes_atual) & (df_completo['Sexta_Ref_Lista'].dt.year == ano_atual))
     )
     df_mes = df_completo[mask_mes_atual].copy()
     
     if df_mes.empty: print(f"   ⚠️ Nada para {nome_aba_atual}."); return
     print(f"   📅 Atualizando: '{nome_aba_atual}'")
 
+    # 2. Ajuste de limite da Data Final (Impede que a data passe de Sexta-feira)
     if 'Data Final' in df_mes.columns:
         df_mes['Data_Final_Obj'] = pd.to_datetime(df_mes['Data Final'], dayfirst=True, errors='coerce')
         df_mes['Sexta_Limite'] = df_mes['Data_Ref_Lista'] + pd.Timedelta(days=4)
@@ -301,6 +305,24 @@ def processar_mes_atual(df_completo, gc, df_equipes):
         df_mes.loc[mask_ajuste, 'Data Final'] = df_mes.loc[mask_ajuste, 'Sexta_Limite'].dt.strftime('%d/%m/%Y')
         df_mes = df_mes.drop(columns=['Data_Final_Obj', 'Sexta_Limite'])
 
+    # 3. ✂️ FILTRO CIRÚRGICO: Remover tarefas que não são do mês atual
+    # Cria uma data de referência da tarefa (prioriza Final; se não tiver, usa a Inicial)
+    df_mes['Data_Ref_Tarefa'] = pd.to_datetime(df_mes['Data Final'], dayfirst=True, errors='coerce').fillna(
+        pd.to_datetime(df_mes['Data Inicial'], dayfirst=True, errors='coerce')
+    )
+    
+    # Mantém a tarefa APENAS se a data exata dela for do mês atual
+    mask_cirurgica = (
+        (df_mes['Data_Ref_Tarefa'].dt.month == mes_atual) & 
+        (df_mes['Data_Ref_Tarefa'].dt.year == ano_atual)
+    ) | df_mes['Data_Ref_Tarefa'].isna() # Mantém caso não tenha data para evitar perda
+    
+    df_mes = df_mes[mask_cirurgica].copy()
+    
+    # Se após o corte cirúrgico não sobrar nada (ex: no dia 1º, se ninguém fez nada ainda)
+    if df_mes.empty: print(f"   ⚠️ Nenhuma tarefa exata deste mês para {nome_aba_atual}."); return
+
+    # 4. Associa Encarregado e envia para o Sheets
     if not df_equipes.empty:
         df_mes['Encarregado'] = df_mes['Sub-Lista / Grupo'].apply(lambda x: encontrar_encarregado(x, df_equipes))
 
@@ -315,7 +337,6 @@ def processar_mes_atual(df_completo, gc, df_equipes):
         worksheet.update(data, value_input_option='USER_ENTERED')
         print(f"      ✅ Sucesso!")
     except Exception as e: print(f"      ❌ Erro upload: {e}")
-
 def atualizar_aba_backlog(df_global, gc, df_equipes):
     print(f"\n>>> ATUALIZANDO ABA '{NOME_ABA_BACKLOG}'...")
     mask_backlog = df_global['Atividades Semanal'].astype(str).str.contains("BACKLOG", case=False, na=False)
